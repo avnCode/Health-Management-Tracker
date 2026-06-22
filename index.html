@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Weight Tracker — 86 → 68 kg</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e5e5e3;
+    --text: #1a1a18;
+    --muted: #6b6b68;
+    --hint: #a0a09e;
+    --blue: #185FA5;
+    --blue-light: #E6F1FB;
+    --blue-mid: #378ADD;
+    --green: #3B6D11;
+    --green-light: #EAF3DE;
+    --amber: #854F0B;
+    --amber-light: #FAEEDA;
+    --red: #A32D2D;
+    --red-light: #FCEBEB;
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --surface: #242422;
+      --border: #333330;
+      --text: #f0f0ee;
+      --muted: #9a9a97;
+      --hint: #606060;
+      --blue-light: #0c2a45;
+      --green-light: #1a2e0a;
+      --amber-light: #2e1e05;
+      --red-light: #2e0f0f;
+    }
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.6; padding: 0 0 80px; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .topbar-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .topbar-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .streak-badge { background: var(--blue-light); color: var(--blue); font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(24,95,165,0.2); }
+  .container { max-width: 760px; margin: 0 auto; padding: 24px 20px; }
+  .metrics-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px; }
+  @media (max-width: 600px) { .metrics-row { grid-template-columns: repeat(2, 1fr); } }
+  .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+  .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .metric-val { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .metric-val.blue { color: var(--blue); }
+  .metric-val.green { color: var(--green); }
+  .metric-val.red { color: var(--red); }
+  .metric-sub { font-size: 11px; color: var(--hint); margin-top: 3px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; }
+  .card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 16px; }
+  .log-form { display: flex; gap: 10px; flex-wrap: wrap; }
+  .log-form input { flex: 1; min-width: 120px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 15px; color: var(--text); outline: none; }
+  .log-form input:focus { border-color: var(--blue-mid); }
+  .log-form button { background: var(--blue); color: #fff; border: none; border-radius: var(--radius); padding: 10px 20px; font-size: 15px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
+  .log-form button:hover { opacity: 0.88; }
+  .chart-wrap { position: relative; width: 100%; height: 240px; }
+  .timeline-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  @media (max-width: 500px) { .timeline-grid { grid-template-columns: repeat(4, 1fr); } }
+  .month-tile { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 6px; text-align: center; position: relative; }
+  .month-tile.current { border-color: var(--blue); background: var(--blue-light); }
+  .month-tile.done { border-color: var(--green); background: var(--green-light); }
+  .month-tile .mname { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .month-tile .mtarget { font-size: 14px; font-weight: 600; }
+  .month-tile .mloss { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .month-tile .mbadge { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: var(--blue); color: #fff; font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+  .month-tile .mbadge.done { background: var(--green); }
+  .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .log-table th { text-align: left; padding: 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--hint); border-bottom: 1px solid var(--border); }
+  .log-table td { padding: 9px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+  .log-table tr:last-child td { border-bottom: none; }
+  .log-table .loss-cell { font-weight: 500; }
+  .log-table .loss-cell.pos { color: var(--green); }
+  .log-table .loss-cell.neg { color: var(--red); }
+  .del-btn { background: none; border: none; color: var(--hint); cursor: pointer; font-size: 16px; padding: 0 4px; transition: color 0.1s; }
+  .del-btn:hover { color: var(--red); }
+  .progress-bar-wrap { height: 8px; background: var(--border); border-radius: 999px; margin: 10px 0 4px; overflow: hidden; }
+  .progress-bar-fill { height: 8px; border-radius: 999px; background: var(--blue); transition: width 0.5s ease; }
+  .progress-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--hint); }
+  .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 500px) { .rules-grid { grid-template-columns: 1fr; } }
+  .rule-item { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+  .rule-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .rule-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .strength-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .strength-table th { text-align: left; padding: 5px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--hint); border-bottom: 1px solid var(--border); }
+  .strength-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  .strength-table tr:last-child td { border-bottom: none; }
+  .strength-table tr.active-month td { color: var(--blue); font-weight: 600; background: var(--blue-light); }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); font-size: 13px; font-weight: 500; padding: 10px 20px; border-radius: 999px; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 999; }
+  .toast.show { opacity: 1; }
+  .empty-state { text-align: center; padding: 28px 0; color: var(--hint); font-size: 13px; }
+  .section-note { font-size: 12px; color: var(--muted); margin-top: -10px; margin-bottom: 16px; line-height: 1.6; background: var(--amber-light); color: var(--amber); border-radius: var(--radius); padding: 10px 14px; }
+
+  /* Daily habits tracker */
+  .habits-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .habits-score { display: flex; align-items: center; gap: 10px; }
+  .habits-score-ring { width: 48px; height: 48px; position: relative; }
+  .habits-score-ring svg { transform: rotate(-90deg); }
+  .habits-score-ring .ring-bg { fill: none; stroke: var(--border); stroke-width: 4; }
+  .habits-score-ring .ring-fill { fill: none; stroke: var(--green); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 113; stroke-dashoffset: 113; transition: stroke-dashoffset 0.5s ease; }
+  .habits-score-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--green); }
+  .habits-score-label { font-size: 13px; }
+  .habits-score-label strong { display: block; font-size: 15px; }
+  .habits-score-label span { font-size: 11px; color: var(--muted); }
+  .reset-btn { font-size: 11px; color: var(--hint); background: none; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; cursor: pointer; transition: color 0.1s; }
+  .reset-btn:hover { color: var(--red); border-color: var(--red); }
+  .habit-list { display: flex; flex-direction: column; gap: 8px; }
+  .habit-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; transition: background 0.12s, border-color 0.12s; user-select: none; }
+  .habit-item:hover { background: var(--bg); }
+  .habit-item.checked { background: var(--green-light); border-color: var(--green); }
+  .habit-check { width: 22px; height: 22px; min-width: 22px; border: 2px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; margin-top: 1px; }
+  .habit-item.checked .habit-check { background: var(--green); border-color: var(--green); }
+  .habit-check-icon { display: none; color: #fff; font-size: 14px; font-weight: 700; }
+  .habit-item.checked .habit-check-icon { display: block; }
+  .habit-body { flex: 1; }
+  .habit-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .habit-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .habit-item.checked .habit-title { color: var(--green); }
+  .habits-date { font-size: 12px; color: var(--hint); }
+  .week-heatmap { display: flex; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
+  .week-day { flex: 1; min-width: 34px; text-align: center; }
+  .week-day-label { font-size: 10px; color: var(--hint); margin-bottom: 4px; }
+  .week-day-cells { display: flex; flex-direction: column; gap: 3px; }
+  .habit-dot { height: 8px; border-radius: 2px; background: var(--border); }
+  .habit-dot.done { background: var(--green); }
+  .habit-dot.partial { background: var(--amber); }
+  .week-score { font-size: 10px; color: var(--hint); margin-top: 4px; }
+  .habit-history-header { font-size: 12px; color: var(--muted); margin-bottom: 10px; margin-top: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Weight Tracker</div>
+    <div class="topbar-sub">86 kg → 68 kg · Started 22 Jun 2026</div>
+  </div>
+  <div class="streak-badge" id="streak-badge">🔥 0 day streak</div>
+</div>
+
+<div class="container">
+
+  <!-- Metrics -->
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-label">Current weight</div>
+      <div class="metric-val blue" id="cur-weight">— kg</div>
+      <div class="metric-sub" id="cur-date">No entries yet</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Total lost</div>
+      <div class="metric-val green" id="total-lost">0 kg</div>
+      <div class="metric-sub">from 86 kg</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">To goal</div>
+      <div class="metric-val" id="to-goal">18 kg</div>
+      <div class="metric-sub">target: 68 kg</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">On track?</div>
+      <div class="metric-val" id="on-track">—</div>
+      <div class="metric-sub" id="on-track-sub">log more entries</div>
+    </div>
+  </div>
+
+  <!-- Log entry -->
+  <div class="card">
+    <div class="card-title">Log today's weight</div>
+    <div class="log-form">
+      <input type="date" id="log-date" />
+      <input type="number" id="log-weight" step="0.1" min="50" max="120" placeholder="Weight in kg (e.g. 85.4)" />
+      <button onclick="addEntry()">Log it</button>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="card">
+    <div class="card-title">Overall progress</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="prog-fill" style="width:0%"></div>
+    </div>
+    <div class="progress-labels">
+      <span>86 kg (start)</span>
+      <span id="prog-pct">0%</span>
+      <span>68 kg (goal)</span>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card">
+    <div class="card-title">Weight over time</div>
+    <div class="chart-wrap">
+      <canvas id="weightChart" role="img" aria-label="Line chart of logged weight entries over time"></canvas>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="card">
+    <div class="card-title">Monthly targets</div>
+    <div class="timeline-grid" id="timeline-grid"></div>
+  </div>
+
+  <!-- Strength progression -->
+  <div class="card">
+    <div class="card-title">Strength targets by month</div>
+    <table class="strength-table" id="strength-table">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Run</th>
+          <th>Pushups</th>
+          <th>Pullups</th>
+          <th>Squats</th>
+        </tr>
+      </thead>
+      <tbody id="strength-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Log history -->
+  <div class="card">
+    <div class="card-title">Entry history</div>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Weight</th>
+          <th>Change</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="log-body"></tbody>
+    </table>
+    <div class="empty-state" id="empty-state" style="display:none">No entries yet — log your first weight above.</div>
+  </div>
+
+  <!-- Daily habits tracker -->
+  <div class="card" id="habits-card">
+    <div class="habits-header">
+      <div>
+        <div class="card-title" style="margin-bottom:2px">Today's daily rules</div>
+        <div class="habits-date" id="habits-today-date"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="habits-score">
+          <div class="habits-score-ring">
+            <svg width="48" height="48" viewBox="0 0 48 48">
+              <circle class="ring-bg" cx="24" cy="24" r="18"/>
+              <circle class="ring-fill" id="ring-fill" cx="24" cy="24" r="18"/>
+            </svg>
+            <div class="habits-score-text" id="habits-score-text">0/6</div>
+          </div>
+          <div class="habits-score-label">
+            <strong id="habits-score-label">0 of 6</strong>
+            <span>done today</span>
+          </div>
+        </div>
+        <button class="reset-btn" onclick="resetToday()">Reset</button>
+      </div>
+    </div>
+
+    <div class="habit-list" id="habit-list"></div>
+
+    <div class="habit-history-header">Last 7 days</div>
+    <div class="week-heatmap" id="week-heatmap"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const START_WEIGHT = 86;
+const GOAL_WEIGHT = 68;
+const START_DATE = '2026-06-22';
+
+const MONTHS = [
+  { name: 'Jun', date: '22 Jun', target: 86, loss: 'start', badge: 'Start' },
+  { name: 'Jul', date: '22 Jul', target: 81.5, loss: '−4–5 kg', badge: 'Month 1' },
+  { name: 'Aug', date: '22 Aug', target: 78, loss: '−3–4 kg', badge: null },
+  { name: 'Sep', date: '22 Sep', target: 75, loss: '−3 kg', badge: null },
+  { name: 'Oct', date: '22 Oct', target: 73, loss: '−2–3 kg', badge: null },
+  { name: 'Nov', date: '22 Nov', target: 71, loss: '−2 kg', badge: null },
+  { name: 'Dec', date: '22 Dec', target: 69.5, loss: '−2 kg', badge: 'Target' },
+];
+
+const STRENGTH = [
+  { month: 'Jun 2026', run: '1.5 km', pushups: 25, pullups: 10, squats: 30 },
+  { month: 'Jul 2026', run: '2 km', pushups: 35, pullups: 12, squats: 50 },
+  { month: 'Aug 2026', run: '2.5 km', pushups: 50, pullups: 15, squats: 75 },
+  { month: 'Sep 2026', run: '3 km', pushups: 60, pullups: 17, squats: 100 },
+  { month: 'Oct 2026', run: '3.5 km', pushups: 70, pullups: 20, squats: 120 },
+  { month: 'Nov 2026', run: '4 km', pushups: 80, pullups: 22, squats: 150 },
+  { month: 'Dec 2026', run: '5 km', pushups: 90, pullups: 25, squats: 175 },
+];
+
+function loadEntries() {
+  try { return JSON.parse(localStorage.getItem('wt_entries') || '[]'); }
+  catch(e) { return []; }
+}
+function saveEntries(entries) {
+  localStorage.setItem('wt_entries', JSON.stringify(entries));
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function addEntry() {
+  const dateEl = document.getElementById('log-date');
+  const weightEl = document.getElementById('log-weight');
+  const date = dateEl.value;
+  const weight = parseFloat(weightEl.value);
+  if (!date) { showToast('Pick a date first'); return; }
+  if (isNaN(weight) || weight < 50 || weight > 120) { showToast('Enter a valid weight (50–120 kg)'); return; }
+  const entries = loadEntries();
+  const existing = entries.findIndex(e => e.date === date);
+  if (existing >= 0) {
+    entries[existing].weight = weight;
+    showToast('Entry updated ✓');
+  } else {
+    entries.push({ date, weight });
+    showToast('Logged ' + weight + ' kg ✓');
+  }
+  entries.sort((a, b) => a.date.localeCompare(b.date));
+  saveEntries(entries);
+  weightEl.value = '';
+  render();
+}
+
+function deleteEntry(date) {
+  const entries = loadEntries().filter(e => e.date !== date);
+  saveEntries(entries);
+  showToast('Entry removed');
+  render();
+}
+
+let chartInstance = null;
+
+function render() {
+  const entries = loadEntries();
+  const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Current weight & metrics
+  const latest = sorted.length ? sorted[sorted.length - 1] : null;
+  const curW = document.getElementById('cur-weight');
+  const curD = document.getElementById('cur-date');
+  const totalLost = document.getElementById('total-lost');
+  const toGoal = document.getElementById('to-goal');
+  const onTrack = document.getElementById('on-track');
+  const onTrackSub = document.getElementById('on-track-sub');
+  const progFill = document.getElementById('prog-fill');
+  const progPct = document.getElementById('prog-pct');
+
+  if (latest) {
+    curW.textContent = latest.weight.toFixed(1) + ' kg';
+    curD.textContent = formatDate(latest.date);
+    const lost = START_WEIGHT - latest.weight;
+    totalLost.textContent = (lost >= 0 ? '−' : '+') + Math.abs(lost).toFixed(1) + ' kg';
+    totalLost.className = 'metric-val ' + (lost >= 0 ? 'green' : 'red');
+    const remaining = latest.weight - GOAL_WEIGHT;
+    toGoal.textContent = remaining > 0 ? remaining.toFixed(1) + ' kg' : 'Reached! 🎉';
+    const pct = Math.min(100, Math.max(0, (lost / (START_WEIGHT - GOAL_WEIGHT)) * 100));
+    progFill.style.width = pct.toFixed(1) + '%';
+    progPct.textContent = pct.toFixed(0) + '%';
+
+    // On track check
+    const daysSinceStart = Math.floor((new Date(latest.date) - new Date(START_DATE)) / 86400000);
+    const expectedLoss = (daysSinceStart / 30) * 4.5;
+    const actualLoss = lost;
+    if (sorted.length >= 3) {
+      if (actualLoss >= expectedLoss * 0.85) {
+        onTrack.textContent = '✅ Yes';
+        onTrack.className = 'metric-val green';
+        onTrackSub.textContent = 'Keep it up!';
+      } else {
+        onTrack.textContent = '⚠️ Behind';
+        onTrack.className = 'metric-val red';
+        onTrackSub.textContent = 'Tighten diet';
+      }
+    } else {
+      onTrack.textContent = '—';
+      onTrack.className = 'metric-val';
+      onTrackSub.textContent = 'log more entries';
+    }
+  } else {
+    curW.textContent = '— kg';
+    curD.textContent = 'No entries yet';
+    progFill.style.width = '0%';
+    progPct.textContent = '0%';
+  }
+
+  // Streak
+  const today = new Date().toISOString().split('T')[0];
+  let streak = 0;
+  let check = new Date();
+  while (true) {
+    const d = check.toISOString().split('T')[0];
+    if (entries.find(e => e.date === d)) { streak++; check.setDate(check.getDate() - 1); }
+    else break;
+  }
+  document.getElementById('streak-badge').textContent = '🔥 ' + streak + ' day streak';
+
+  // Chart
+  const labels = sorted.map(e => formatDate(e.date));
+  const data = sorted.map(e => e.weight);
+  // Add target line
+  const targetData = sorted.map(e => {
+    const days = Math.floor((new Date(e.date) - new Date(START_DATE)) / 86400000);
+    return Math.max(GOAL_WEIGHT, START_WEIGHT - (days / 30) * 4.5);
+  });
+
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById('weightChart').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Actual weight',
+          data,
+          borderColor: '#185FA5',
+          backgroundColor: 'rgba(24,95,165,0.08)',
+          borderWidth: 2.5,
+          tension: 0.3,
+          pointRadius: 5,
+          pointBackgroundColor: '#185FA5',
+          fill: true,
+        },
+        {
+          label: 'Target pace',
+          data: targetData,
+          borderColor: '#3B6D11',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          tension: 0.2,
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' kg' } }
+      },
+      scales: {
+        y: { min: GOAL_WEIGHT - 2, max: START_WEIGHT + 1, ticks: { callback: v => v + ' kg' }, grid: { color: 'rgba(0,0,0,0.05)' } },
+        x: { ticks: { maxTicksLimit: 8, maxRotation: 30 }, grid: { display: false } }
+      }
+    }
+  });
+
+  // Timeline
+  const now = new Date();
+  const nowMonth = now.getMonth(); // 0-indexed
+  const nowYear = now.getFullYear();
+  const monthOffsets = [5,6,7,8,9,10,11]; // Jun=5 ... Dec=11
+  const tlGrid = document.getElementById('timeline-grid');
+  tlGrid.innerHTML = MONTHS.map((m, i) => {
+    const mMonth = monthOffsets[i];
+    const isDone = (nowYear > 2026) || (nowYear === 2026 && nowMonth > mMonth);
+    const isCurrent = nowYear === 2026 && nowMonth === mMonth;
+    let cls = 'month-tile';
+    if (isDone) cls += ' done';
+    else if (isCurrent) cls += ' current';
+    const badge = m.badge ? `<div class="mbadge ${isDone ? 'done' : ''}">${m.badge}</div>` : '';
+    return `<div class="${cls}">${badge}
+      <div class="mname">${m.name}</div>
+      <div class="mtarget">${m.target} kg</div>
+      <div class="mloss">${m.loss}</div>
+    </div>`;
+  }).join('');
+
+  // Strength table
+  const sb = document.getElementById('strength-body');
+  sb.innerHTML = STRENGTH.map((s, i) => {
+    const mIdx = monthOffsets[i];
+    const active = nowYear === 2026 && nowMonth === mIdx;
+    return `<tr class="${active ? 'active-month' : ''}">
+      <td>${s.month}</td><td>${s.run}</td><td>${s.pushups}</td><td>${s.pullups}</td><td>${s.squats}</td>
+    </tr>`;
+  }).join('');
+
+  // Log table
+  const lb = document.getElementById('log-body');
+  const emptyState = document.getElementById('empty-state');
+  if (!sorted.length) {
+    lb.innerHTML = '';
+    emptyState.style.display = 'block';
+  } else {
+    emptyState.style.display = 'none';
+    const reversed = [...sorted].reverse();
+    lb.innerHTML = reversed.map((e, i) => {
+      const prev = reversed[i + 1];
+      let changeCell = '<td class="loss-cell">—</td>';
+      if (prev) {
+        const diff = e.weight - prev.weight;
+        const sign = diff < 0 ? '−' : '+';
+        const cls = diff < 0 ? 'pos' : 'neg';
+        changeCell = `<td class="loss-cell ${cls}">${sign}${Math.abs(diff).toFixed(1)} kg</td>`;
+      }
+      return `<tr>
+        <td>${formatDate(e.date)}</td>
+        <td><strong>${e.weight.toFixed(1)} kg</strong></td>
+        ${changeCell}
+        <td><button class="del-btn" onclick="deleteEntry('${e.date}')" title="Delete entry">×</button></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function formatDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
+// Set default date to today
+document.getElementById('log-date').value = new Date().toISOString().split('T')[0];
+
+// ── Daily habits tracker ──────────────────────────────────────────
+
+const HABITS = [
+  { id: 'run',      emoji: '🏃', title: 'Morning run',          desc: 'At least 1.5 km. No skipping — reschedule to evening max.' },
+  { id: 'steps',    emoji: '👟', title: '10,000 steps',          desc: 'Track it. At 8k by 9pm? Get up and walk. Burns 400–600 kcal.' },
+  { id: 'badminton',emoji: '🏸', title: 'Badminton (1 hr)',      desc: '5–7 days/week minimum. Your biggest single calorie burn — protect it.' },
+  { id: 'sleep',    emoji: '🌙', title: 'Sleep 7–8 hrs',         desc: 'Poor sleep spikes cortisol and hunger hormones. Non-negotiable.' },
+  { id: 'water',    emoji: '💧', title: '3–4 L water',           desc: '500 ml before each meal. Hunger is often just dehydration.' },
+  { id: 'diet',     emoji: '🚫', title: 'Zero alcohol / fried',  desc: 'One binge = 3 days of progress lost. Alcohol blocks fat burn for 24+ hrs.' },
+];
+
+function todayKey() {
+  return 'habits_' + new Date().toISOString().split('T')[0];
+}
+function dateKey(date) {
+  return 'habits_' + date;
+}
+
+function loadHabits(date) {
+  const key = date ? dateKey(date) : todayKey();
+  try { return JSON.parse(localStorage.getItem(key) || '{}'); }
+  catch(e) { return {}; }
+}
+function saveHabits(state) {
+  localStorage.setItem(todayKey(), JSON.stringify(state));
+}
+
+function toggleHabit(id) {
+  const state = loadHabits();
+  state[id] = !state[id];
+  saveHabits(state);
+  renderHabits();
+}
+
+function resetToday() {
+  localStorage.setItem(todayKey(), JSON.stringify({}));
+  renderHabits();
+  showToast('Today reset');
+}
+
+function renderHabits() {
+  const state = loadHabits();
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+  document.getElementById('habits-today-date').textContent = dateStr;
+
+  const done = HABITS.filter(h => state[h.id]).length;
+  const total = HABITS.length;
+  const pct = Math.round((done / total) * 100);
+
+  // Ring
+  const circumference = 113;
+  const offset = circumference - (circumference * done / total);
+  document.getElementById('ring-fill').style.strokeDashoffset = offset;
+  document.getElementById('habits-score-text').textContent = done + '/' + total;
+  document.getElementById('habits-score-label').textContent = done + ' of ' + total;
+
+  // Change ring color based on completion
+  const ring = document.getElementById('ring-fill');
+  if (done === total) ring.style.stroke = '#3B6D11';
+  else if (done >= 4) ring.style.stroke = '#185FA5';
+  else if (done >= 2) ring.style.stroke = '#854F0B';
+  else ring.style.stroke = '#A32D2D';
+
+  // Habit list
+  const list = document.getElementById('habit-list');
+  list.innerHTML = HABITS.map(h => `
+    <div class="habit-item ${state[h.id] ? 'checked' : ''}" onclick="toggleHabit('${h.id}')">
+      <div class="habit-check">
+        <span class="habit-check-icon">✓</span>
+      </div>
+      <div class="habit-body">
+        <div class="habit-title">${h.emoji} ${h.title}</div>
+        <div class="habit-desc">${h.desc}</div>
+      </div>
+    </div>
+  `).join('');
+
+  // Week heatmap — last 7 days
+  const heatmap = document.getElementById('week-heatmap');
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
+
+  heatmap.innerHTML = days.map(d => {
+    const iso = d.toISOString().split('T')[0];
+    const isToday = iso === new Date().toISOString().split('T')[0];
+    const dayState = loadHabits(iso);
+    const dayDone = HABITS.filter(h => dayState[h.id]).length;
+    const label = d.toLocaleDateString('en-IN', { weekday: 'short' }).slice(0,2);
+
+    const dots = HABITS.map(h => {
+      const cls = dayState[h.id] ? 'done' : '';
+      return `<div class="habit-dot ${cls}"></div>`;
+    }).join('');
+
+    const scoreColor = dayDone === 6 ? 'color:var(--green)' : dayDone >= 4 ? 'color:var(--blue)' : '';
+    return `<div class="week-day">
+      <div class="week-day-label" style="${isToday ? 'color:var(--blue);font-weight:700' : ''}">${label}</div>
+      <div class="week-day-cells">${dots}</div>
+      <div class="week-score" style="${scoreColor}">${dayDone}/${HABITS.length}</div>
+    </div>`;
+  }).join('');
+}
+
+renderHabits();
+render();
+</script>
+</body>
+</html>
